@@ -1,3 +1,9 @@
+downloads
+data
+config.json
+pot.sqlite
+test
+
 # Logs
 logs
 *.log

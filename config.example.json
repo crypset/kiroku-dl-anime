@@ -1,0 +1,47 @@
+{
+  "app": {
+    "downloadDir": "downloads"
+  },
+  "browser": {
+    "headless": true,
+    "viewport": {
+      "width": 1280,
+      "height": 720
+    },
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "timeout": 30000,
+    "args": [
+      "--disable-blink-features=AutomationControlled",
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-infobars",
+      "--disable-extensions",
+      "--disable-dev-shm-usage"
+    ]
+  },
+  "download": {
+    "delay": 4000,
+    "pageDelay": 4000,
+    "searchDelay": 6000,
+    "maxConcurrent": 1,
+    "skipErrors": true,
+    "skipDownloaded": true,
+    "useDatabase": true
+  },
+  "database": {
+    "enabled": true,
+    "sync": true
+  },
+  "searches": [
+    {
+      "name": "Fuuki Iin to Fuuzoku Katsudou",
+      "url": "https://hentaiz.org/39865-disciplinarnyj-komitet-i-seksualnye-uslugi-fuuki-iin-to-fuuzoku-katsudou.html",
+      "skipDownloaded": true
+    },
+    {
+      "name": "Seifuku wa Kita mama de",
+      "url": "https://www.animefox.org/hentai/2823-seifuku-wa-kita-mama-de.html",
+      "skipDownloaded": true
+    }
+  ]
+}
