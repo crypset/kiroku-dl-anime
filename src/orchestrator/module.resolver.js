@@ -1,4 +1,4 @@
-import { AnimeFoxDownloader } from "../module/animefox.downloader.js";
+import { AnimeFoxDownloader } from "../module/animefox/index.js";
 // Import new modules here as you add them:
 // import { AnotherSiteDownloader } from "../module/anothersite/anothersite.downloader.js";
 
