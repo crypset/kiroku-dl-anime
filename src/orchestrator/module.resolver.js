@@ -1,6 +1,5 @@
 import { AnimeFoxDownloader } from "../module/animefox/index.js";
-// Import new modules here as you add them:
-// import { AnotherSiteDownloader } from "../module/anothersite/anothersite.downloader.js";
+import { HentaizDownloader } from "../module/hentaiz/index.js";
 
 /**
  * Registry maps URL hostname patterns to downloader constructors.
@@ -15,10 +14,10 @@ const REGISTRY = [
     match: (url) => url.includes("animefox.org"),
     createDownloader: (config) => new AnimeFoxDownloader(config),
   },
-  // {
-  //   match: (url) => url.includes("anothersite.com"),
-  //   createDownloader: (config) => new AnotherSiteDownloader(config),
-  // },
+  {
+    match: (url) => url.includes("hentaiz.org"),
+    createDownloader: (config) => new HentaizDownloader(config),
+  },
 ];
 
 /**
