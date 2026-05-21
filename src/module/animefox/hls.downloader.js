@@ -2,6 +2,7 @@ import { writeFile } from "fs/promises";
 import { join } from "path";
 
 import axios from "axios";
+import pLimit from "p-limit";
 
 import { print } from "../../shared/utils.js";
 
@@ -11,11 +12,12 @@ import { print } from "../../shared/utils.js";
  */
 export class HlsDownloader {
   /**
-   * @param {{ ua: string, qualityOrder: string[] }} options
+   * @param {{ ua: string, qualityOrder: string[], concurrency?: number }} options
    */
-  constructor({ ua, qualityOrder }) {
+  constructor({ ua, qualityOrder, concurrency = 8 }) {
     this.ua = ua;
     this.qualityOrder = qualityOrder;
+    this.concurrency = concurrency;
   }
 
   /**
@@ -32,9 +34,9 @@ export class HlsDownloader {
   }
 
   /**
-   * Downloads all segments in order to `tmpDir`.
-   * Writing to disk (instead of buffering everything in RAM) keeps memory
-   * usage flat regardless of episode length.
+   * Downloads all segments in parallel (up to `this.concurrency` at once) to `tmpDir`.
+   * File names are based on the original segment index so the order is preserved
+   * regardless of which requests finish first.
    *
    * @param {string[]} segments - ordered list of .ts segment URLs
    * @param {string}   tmpDir   - temporary directory created by the caller
@@ -42,27 +44,33 @@ export class HlsDownloader {
    */
   async downloadSegments(segments, tmpDir) {
     const total = segments.length;
-    const paths = [];
+    const paths = new Array(total);
+    const limit = pLimit(this.concurrency);
+    let done = 0;
+    const logStep = Math.max(1, Math.floor(total / 10));
 
-    for (let i = 0; i < total; i++) {
-      const { data } = await axios.get(segments[i], {
-        responseType: "arraybuffer",
-        headers: {
-          "Referrer-Policy": "no-referrer",
-          "User-Agent": this.ua,
-        },
-      });
+    const tasks = segments.map((url, i) =>
+      limit(async () => {
+        const { data } = await axios.get(url, {
+          responseType: "arraybuffer",
+          headers: {
+            "Referrer-Policy": "no-referrer",
+            "User-Agent": this.ua,
+          },
+        });
 
-      const segPath = join(tmpDir, `${String(i).padStart(6, "0")}.ts`);
-      await writeFile(segPath, Buffer.from(data));
-      paths.push(segPath);
+        const segPath = join(tmpDir, `${String(i).padStart(6, "0")}.ts`);
+        await writeFile(segPath, Buffer.from(data));
+        paths[i] = segPath;
 
-      const logStep = Math.max(1, Math.floor(total / 10));
-      if (i % logStep === 0 || i === total - 1) {
-        print(`[AnimeFox] Progress: ${i + 1}/${total} segments`, "info");
-      }
-    }
+        done++;
+        if (done % logStep === 0 || done === total) {
+          print(`[AnimeFox] Progress: ${done}/${total} segments`, "info");
+        }
+      })
+    );
 
+    await Promise.all(tasks);
     return paths;
   }
 

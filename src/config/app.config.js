@@ -106,6 +106,7 @@ function applyDefaults(config) {
       baseUrl: "https://www.animefox.org",
       iframePlayerPath: "/engine/ajax/iframePlayer.php",
       qualityOrder: ["1080p", "720p", "480p", "360p", "240p"],
+      concurrency: 8,
       ...config.animefox,
     },
   };

@@ -55,12 +55,14 @@ export class AnimeFoxDownloader extends BaseDownloader {
     this.baseUrl = af.baseUrl;
     this.iframePlayerUrl = `${af.baseUrl}${af.iframePlayerPath}`;
     this.qualityOrder = af.qualityOrder;
+    this.concurrency = af.concurrency ?? 8;
 
     const shared = {
       baseUrl: this.baseUrl,
       iframePlayerUrl: this.iframePlayerUrl,
       ua: this.ua,
       qualityOrder: this.qualityOrder,
+      concurrency: this.concurrency,
     };
 
     this.#pageParser       = new PageParser(shared);
