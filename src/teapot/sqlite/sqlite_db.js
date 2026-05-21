@@ -13,12 +13,13 @@ export async function initializeDatabase() {
     print("Database connection established successfully", "system");
 
     // alter: true — безпечніше ніж force: true, не видаляє дані
-    await sequelize.sync({ alter: true });
+    await sequelize.sync();
     print("Database models synchronized", "system");
 
     return true;
   } catch (error) {
     print(`Unable to connect to the database: ${error.message}`, "error");
+    console.log(error)
     return false;
   }
 }

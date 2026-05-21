@@ -1,14 +1,25 @@
-import { writeFile, mkdtemp, rm } from "fs/promises";
-import { tmpdir } from "os";
+import { writeFile, mkdir, rm } from "fs/promises";
 import { resolve, join } from "path";
 
 import axios from "axios";
 import * as cheerio from "cheerio";
+import { execa } from "execa";
+import ffmpegPath from "ffmpeg-static";
+import CryptoJS from "crypto-js";
 
 import { BaseDownloader } from "../module/base.downloader.js";
 import { Browser } from "../module/browser/browser.js";
 import { isDownloaded, markDownloaded } from "../teapot/models/index.js";
 import { sleep, print, ensureDir, sanitizeName } from "../shared/utils.js";
+import {
+  TEMP_DIR,
+  EMBED_HOST,
+  PLAYER_API_CONFIG_PATH,
+  PLAYER_API_PATH,
+  CRYPTO_FALLBACK_KEY,
+  WINDOW_VARS_TIMEOUT_MS,
+  HLS_INTERCEPT_EXTRA_WAIT_MS,
+} from "../config/app.config.js";
 
 // ─── AnimeFoxDownloader ────────────────────────────────────────────────────────
 
@@ -71,10 +82,11 @@ export class AnimeFoxDownloader extends BaseDownloader {
 
       // 3. Optionally download poster
       if (animeData.posterUrl) {
-        await this.#downloadPoster(animeData.posterUrl, outDir).catch(
-          (error) =>
-            print("[AnimeFox] Poster download failed — skipping", "warning"),
-        );
+        try {
+          await this.#downloadPoster(animeData.posterUrl, outDir);
+        } catch (error) {
+          print("[AnimeFox] Poster download failed — skipping", "warning");
+        }
       }
 
       // 4. Iterate series (episodes)
@@ -154,11 +166,13 @@ export class AnimeFoxDownloader extends BaseDownloader {
     const m3u8Url = await this.#fetchM3u8Url(embedUrl);
 
     // 3. Fetch playlist and extract segment URLs
-    const segments = await this.#fetchPlaylistSegments(m3u8Url);
+    const { segments, height } = await this.#fetchPlaylistSegments(m3u8Url);
 
     // 4. Download segments to a temp directory
-    const epPrefix = `${String(number).padStart(2, "0")} - ${episode.title}`;
-    const tmpDir = await mkdtemp(join(tmpdir(), "animefox-"));
+    const qualityTag = height > 0 ? ` [${height}p]` : "";
+    const epPrefix = `${String(number).padStart(2, "0")} - ${episode.title}${qualityTag}`;
+    const tmpDir = join(TEMP_DIR, `animefox-${Date.now()}`);
+    await mkdir(tmpDir, { recursive: true });
 
     try {
       const segmentPaths = await this.#downloadSegments(segments, tmpDir);
@@ -268,7 +282,7 @@ export class AnimeFoxDownloader extends BaseDownloader {
       // GET /api-config/
       const apiConfigUrl =
         `${Buffer.from(vars.apx, "base64").toString()}${vars.qsx}` +
-        `?p=${vars.ps}&_=${vars.pd}`;
+        `${PLAYER_API_CONFIG_PATH}?p=${vars.ps}&_=${vars.pd}`;
       print(`[DBG] api-config URL: ${apiConfigUrl.slice(0, 80)}...`, "info");
 
       const { data: encryptedConfig } = await axios.get(apiConfigUrl, {
@@ -285,12 +299,12 @@ export class AnimeFoxDownloader extends BaseDownloader {
       );
 
       // POST /api/
-      const apiUrl = `https://x.tentacl.su/api/?p=${vars.ps}`;
+      const apiUrl = `https://${EMBED_HOST}${PLAYER_API_PATH}?p=${vars.ps}`;
       const { data: encryptedSources } = await axios.post(apiUrl, vars.kaken, {
         headers: {
           "X-Requested-With": "XMLHttpRequest",
           "Content-Type": "text/plain",
-          Origin: "https://x.tentacl.su",
+          Origin: `https://${EMBED_HOST}`,
           "Referrer-Policy": "no-referrer",
           "User-Agent": this.ua,
         },
@@ -337,7 +351,7 @@ export class AnimeFoxDownloader extends BaseDownloader {
 
       // Wait until the obfuscated JS has written its vars into window
       await page.waitForFunction(() => window.ps && window.kaken, {
-        timeout: 15_000,
+        timeout: WINDOW_VARS_TIMEOUT_MS,
       });
 
       const vars = await page.evaluate(() => ({
@@ -368,19 +382,10 @@ export class AnimeFoxDownloader extends BaseDownloader {
    * @returns {Promise<string>}        - the /hls/ URL
    */
   async #extractHlsUrl(encryptedConfig, encryptedSources, vars) {
-    // Dynamically import crypto-js so the rest of the module works
-    // even if the package is not installed (fallback will kick in).
-    let CryptoJS;
-    try {
-      ({ default: CryptoJS } = await import("crypto-js"));
-    } catch {
-      throw new Error("crypto-js not installed — run: npm install crypto-js");
-    }
-
     // Keys to try, in order of likelihood
     const keyCandidates = [
-      vars.localKey, // extracted from window (may be undefined)
-      "8eeb24d0", // known default from deobfuscated source
+      vars.localKey,      // extracted from window (may be undefined)
+      CRYPTO_FALLBACK_KEY, // known default from deobfuscated source
     ].filter(Boolean);
 
     for (const key of keyCandidates) {
@@ -403,7 +408,7 @@ export class AnimeFoxDownloader extends BaseDownloader {
             parsed?.file ||
             (Array.isArray(parsed) && parsed[0]?.file) ||
             null;
-        } catch {
+        } catch (error) {
           // Not JSON — search for a bare /hls/ URL
         }
 
@@ -419,7 +424,7 @@ export class AnimeFoxDownloader extends BaseDownloader {
           );
           return hlsUrl;
         }
-      } catch {
+      } catch (error) {
         // Wrong key or corrupt payload — try next
       }
     }
@@ -444,7 +449,7 @@ export class AnimeFoxDownloader extends BaseDownloader {
       // Intercept all requests and capture the first /hls/ hit
       page.on("request", (req) => {
         const url = req.url();
-        if (!m3u8Url && url.includes("x.tentacl.su/hls/")) {
+        if (!m3u8Url && url.includes(`${EMBED_HOST}/hls/`)) {
           m3u8Url = url;
           print(`[DBG] intercepted hls URL: ${url.slice(0, 80)}...`, "info");
         }
@@ -457,7 +462,7 @@ export class AnimeFoxDownloader extends BaseDownloader {
 
       // Give the player a few more seconds if networkidle wasn't enough
       if (!m3u8Url) {
-        await page.waitForTimeout(5_000);
+        await page.waitForTimeout(HLS_INTERCEPT_EXTRA_WAIT_MS);
       }
 
       if (!m3u8Url) {
@@ -473,17 +478,21 @@ export class AnimeFoxDownloader extends BaseDownloader {
   // ─── Private: m3u8 download ────────────────────────────────────────────────
 
   /**
-   * Fetches the m3u8 playlist and returns the list of .ts segment URLs.
+   * Fetches the m3u8 playlist and returns segments with the chosen quality.
    * Handles master playlists (with quality variants) and media playlists.
+   *
+   * @param {string} m3u8Url
+   * @param {number} [selectedHeight=0] - height chosen at master-playlist level
+   * @returns {Promise<{ segments: string[], height: number }>}
    */
-  async #fetchPlaylistSegments(m3u8Url) {
+  async #fetchPlaylistSegments(m3u8Url, selectedHeight = 0) {
     const text = await fetchText(m3u8Url, this.ua, {
       "Referrer-Policy": "no-referrer",
     });
 
     if (text.includes("#EXT-X-STREAM-INF")) {
-      const variantUrl = this.#pickBestVariant(text, m3u8Url);
-      return this.#fetchPlaylistSegments(variantUrl);
+      const { url: variantUrl, height } = this.#pickBestVariant(text, m3u8Url);
+      return this.#fetchPlaylistSegments(variantUrl, height);
     }
 
     const base = m3u8Url.substring(0, m3u8Url.lastIndexOf("/") + 1);
@@ -499,7 +508,7 @@ export class AnimeFoxDownloader extends BaseDownloader {
       throw new Error("m3u8 playlist has no segments");
     }
 
-    return segments;
+    return { segments, height: selectedHeight };
   }
 
   #pickBestVariant(masterText, masterUrl) {
@@ -525,7 +534,7 @@ export class AnimeFoxDownloader extends BaseDownloader {
     }
 
     variants.sort((a, b) => b.height - a.height);
-    return variants[0].url;
+    return variants[0]; // { url, height }
   }
 
   /**
@@ -608,17 +617,6 @@ export class AnimeFoxDownloader extends BaseDownloader {
    * @param {string[]} args
    */
   async #runFfmpeg(args) {
-    const [{ execa }, { default: ffmpegPath }] = await Promise.all([
-      import("execa").catch(() => {
-        throw new Error("execa not installed — run: npm install execa");
-      }),
-      import("ffmpeg-static").catch(() => {
-        throw new Error(
-          "ffmpeg-static not installed — run: npm install ffmpeg-static",
-        );
-      }),
-    ]);
-
     if (!ffmpegPath || typeof ffmpegPath !== "string") {
       throw new Error(
         `ffmpeg-static повернув невалідний шлях: ${ffmpegPath}. ` +
@@ -665,7 +663,7 @@ export class AnimeFoxDownloader extends BaseDownloader {
         await writeFile(outFile, Buffer.from(data));
         print(`[AnimeFox] Poster saved: ${outFile}`, "success");
         return;
-      } catch {
+      } catch (error) {
         // try next
       }
     }

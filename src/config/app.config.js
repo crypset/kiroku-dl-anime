@@ -1,9 +1,47 @@
 import { readFile } from "fs/promises";
-import { resolve } from "path";
+import { resolve, join } from "path";
+import { fileURLToPath } from "url";
+import { dirname } from "path";
 
 import rawConfigFile from "../../config.json" with { type: "json" }
 
 const CONFIG_PATH = resolve(process.cwd(), "config.json");
+
+// ─── Paths ────────────────────────────────────────────────────────────────────
+
+const PROJECT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+
+/** Тимчасова директорія для сегментів під час скачування */
+export const TEMP_DIR = join(PROJECT_ROOT, "data", "temp");
+
+// ─── AnimeFox / embed player constants ───────────────────────────────────────
+
+/** Хост embed-плеєра (використовується в Strategy A і Fallback B) */
+export const EMBED_HOST = "x.tentacl.su";
+
+/** Шлях до ендпоінту конфігурації плеєра */
+export const PLAYER_API_CONFIG_PATH = "/api-config/";
+
+/** Шлях до ендпоінту з зашифрованими сорсами */
+export const PLAYER_API_PATH = "/api/";
+
+/**
+ * Fallback-ключ дешифрування CryptoJS AES.
+ * Отримано з деобфускованого JS плеєра — змінюється рідко,
+ * але якщо Strategy A почне падати, перевір цей ключ першим.
+ */
+export const CRYPTO_FALLBACK_KEY = "8eeb24d0";
+
+// ─── Timeouts ─────────────────────────────────────────────────────────────────
+
+/** Скільки мс чекати на window.ps / window.kaken після networkidle */
+export const WINDOW_VARS_TIMEOUT_MS = 15_000;
+
+/**
+ * Додатковий час очікування (мс) у Fallback B, якщо networkidle
+ * не встиг захопити /hls/ запит.
+ */
+export const HLS_INTERCEPT_EXTRA_WAIT_MS = 5_000;
 
 /**
  * Loads, validates, and normalizes config.json from project root.
