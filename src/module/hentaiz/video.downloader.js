@@ -10,8 +10,9 @@ import { print } from "../../shared/utils.js";
  * Logs progress every ~10% of total size (if Content-Length is available).
  */
 export class VideoDownloader {
-  /** @param {{ ua: string }} shared */
+  /** @param {{ baseUrl: string, ua: string }} shared */
   constructor(shared) {
+    this.baseUrl = shared.baseUrl ?? "https://hentaiz.org";
     this.ua = shared.ua ?? "Mozilla/5.0";
   }
 
@@ -27,7 +28,7 @@ export class VideoDownloader {
       responseType: "stream",
       headers: {
         "User-Agent": this.ua,
-        Referer: "https://hentaiz.org/",
+        Referer: this.baseUrl,
       },
     });
 

@@ -109,5 +109,9 @@ function applyDefaults(config) {
       concurrency: 8,
       ...config.animefox,
     },
+    hentaiz: {
+      baseUrl: "https://hentaiz.org",
+      ...config.hentaiz,
+    },
   };
 }

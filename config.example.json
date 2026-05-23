@@ -8,6 +8,28 @@
       "width": 1280,
       "height": 720
     },
+    "dataPath": "data/browser",
+    "launchArgs": [
+      "--no-sandbox",
+      "--disable-blink-features=AutomationControlled",
+      "--disable-infobars",
+      "--disable-webrtc-encryption",
+      "--enforce-webrtc-ip-permission-check",
+      "--use-gl=swiftshader",
+      "--disable-breakpad",
+      "--no-first-run",
+      "--no-default-browser-check"
+    ],
+    "blockedDomains": [
+      "google-analytics.com",
+      "googletagmanager.com",
+      "doubleclick.net",
+      "amplitude.com",
+      "segment.io",
+      "sentry.io",
+      "ads-twitter.com",
+      "analytics.twitter.com"
+    ],
     "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     "timeout": 30000,
     "args": [
@@ -18,6 +40,9 @@
       "--disable-extensions",
       "--disable-dev-shm-usage"
     ]
+  },
+  "animefox": {
+    "concurrency": 8
   },
   "download": {
     "delay": 4000,
